@@ -1,0 +1,66 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  clientDir: BIF4-SWEN-Tour-Planner-Client
+  serverDir: BIF4-SWEN-Tour-Planner-Server
+
+stages:
+- stage: Build_Test
+  displayName: Build + Test
+  jobs:
+  - job: Client
+    displayName: Build Client (Angular)
+    steps:
+    - checkout: self
+      submodules: recursive
+      persistCredentials: true
+
+    - task: NodeTool@0
+      inputs:
+        versionSpec: "20.x"
+      displayName: "Use Node.js"
+
+    - script: |
+        cd "$(clientDir)"
+        npm ci
+        npm run build
+      displayName: "npm ci + build"
+
+    - task: PublishPipelineArtifact@1
+      inputs:
+        targetPath: "$(clientDir)/dist"
+        artifact: "client_dist"
+      displayName: "Publish client artifact"
+
+  - job: Server
+    displayName: Build Server (Spring Boot / Maven)
+    steps:
+    - checkout: self
+      submodules: recursive
+      persistCredentials: true
+
+    # Option A (best chance to work with your stated Java requirement): build in a container with JDK 24
+    - script: |
+        docker run --rm \
+          -v "$(Build.SourcesDirectory)/$(serverDir)":/src \
+          -w /src \
+          eclipse-temurin:24-jdk \
+          ./mvnw -B clean test package
+      displayName: "mvnw test + package (JDK24 container)"
+
+    - task: PublishPipelineArtifact@1
+      inputs:
+        targetPath: "$(Build.SourcesDirectory)/$(serverDir)/target"
+        artifact: "server_target"
+      displayName: "Publish server artifact"
